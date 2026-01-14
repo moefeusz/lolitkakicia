@@ -3,12 +3,12 @@ import { useAuth } from '@/hooks/useAuth';
 import { Lock, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export function ResetPasswordPage() {
-  const { updatePassword } = useAuth();
+  const { updatePassword, session, isLoading } = useAuth();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +25,12 @@ export function ResetPasswordPage() {
       return;
     }
 
-    setIsLoading(true);
+    if (!session) {
+      setError('Brak aktywnej sesji resetu. Otwórz link z maila ponownie.');
+      return;
+    }
+
+    setIsSaving(true);
     try {
       const { error } = await updatePassword(password);
       if (error) {
@@ -36,7 +41,7 @@ export function ResetPasswordPage() {
     } catch (err) {
       setError('Wystąpił nieoczekiwany błąd');
     } finally {
-      setIsLoading(false);
+      setIsSaving(false);
     }
   };
 
@@ -54,6 +59,11 @@ export function ResetPasswordPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {!session && !isLoading && !success && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-600">
+              Link resetu jest nieaktywny lub wygasł. Poproś o nowy link resetu hasła.
+            </div>
+          )}
           {error && (
             <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
               <AlertCircle className="h-4 w-4 flex-shrink-0" />
@@ -106,10 +116,10 @@ export function ResetPasswordPage() {
 
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isSaving || isLoading || !session}
             className="btn-primary w-full disabled:opacity-50"
           >
-            {isLoading ? 'Zapisywanie...' : 'Zapisz nowe hasło'}
+            {isSaving || isLoading ? 'Zapisywanie...' : 'Zapisz nowe hasło'}
           </button>
         </form>
       </div>
