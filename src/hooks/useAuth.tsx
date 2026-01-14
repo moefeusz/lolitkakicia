@@ -61,10 +61,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         search.includes('refresh_token=') &&
         search.includes('type=recovery');
 
-      if (hasRecoveryHashTokens || hasRecoverySearchTokens) {
-        const params = new URLSearchParams(
-          (hasRecoveryHashTokens ? hash : search).replace(/^[#?]/, '')
-        );
+      const recoveryParamsSource = hasRecoveryHashTokens
+        ? hash
+        : hasRecoverySearchTokens
+        ? search
+        : null;
+
+      if (recoveryParamsSource) {
+        const params = new URLSearchParams(recoveryParamsSource.replace(/^[#?]/, ''));
         const access_token = params.get('access_token');
         const refresh_token = params.get('refresh_token');
 

@@ -92,6 +92,8 @@ export function ResetPasswordPage() {
                 className="input-field pl-10"
                 minLength={6}
                 required
+                autoComplete="new-password"
+                disabled={!!success}
               />
             </div>
           </div>
@@ -110,6 +112,8 @@ export function ResetPasswordPage() {
                 className="input-field pl-10"
                 minLength={6}
                 required
+                autoComplete="new-password"
+                disabled={!!success}
               />
             </div>
           </div>
