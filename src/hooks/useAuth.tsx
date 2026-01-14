@@ -51,13 +51,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const initializeSession = async () => {
       const hash = window.location.hash;
-      const hasRecoveryTokens =
+      const search = window.location.search;
+      const hasRecoveryHashTokens =
         hash.includes('access_token=') &&
         hash.includes('refresh_token=') &&
         hash.includes('type=recovery');
+      const hasRecoverySearchTokens =
+        search.includes('access_token=') &&
+        search.includes('refresh_token=') &&
+        search.includes('type=recovery');
 
-      if (hasRecoveryTokens) {
-        const params = new URLSearchParams(hash.replace('#', ''));
+      if (hasRecoveryHashTokens || hasRecoverySearchTokens) {
+        const params = new URLSearchParams(
+          (hasRecoveryHashTokens ? hash : search).replace(/^[#?]/, '')
+        );
         const access_token = params.get('access_token');
         const refresh_token = params.get('refresh_token');
 
