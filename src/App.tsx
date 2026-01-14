@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { NotWhitelisted } from "@/components/auth/NotWhitelisted";
+import { ResetPasswordPage } from "@/components/auth/ResetPasswordPage";
 import Dashboard from "./pages/Dashboard";
 import Income from "./pages/Income";
 import Expenses from "./pages/Expenses";
@@ -15,7 +16,7 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 function AppRoutes() {
-  const { user, isLoading, isWhitelisted } = useAuth();
+  const { user, isLoading, isWhitelisted, isPasswordRecovery } = useAuth();
 
   if (isLoading) {
     return (
@@ -27,6 +28,10 @@ function AppRoutes() {
 
   if (!user) {
     return <LoginPage />;
+  }
+
+  if (isPasswordRecovery) {
+    return <ResetPasswordPage />;
   }
 
   if (!isWhitelisted) {
