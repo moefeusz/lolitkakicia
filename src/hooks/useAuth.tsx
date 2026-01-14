@@ -49,26 +49,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    // THEN get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const initializeSession = async () => {
+      const hash = window.location.hash;
+      const search = window.location.search;
+      const hasRecoveryHashTokens =
+        hash.includes('access_token=') &&
+        hash.includes('refresh_token=') &&
+        hash.includes('type=recovery');
+      const hasRecoverySearchTokens =
+        search.includes('access_token=') &&
+        search.includes('refresh_token=') &&
+        search.includes('type=recovery');
+
+      const recoveryParamsSource = hasRecoveryHashTokens
+        ? hash
+        : hasRecoverySearchTokens
+        ? search
+        : null;
+
+      if (recoveryParamsSource) {
+        const params = new URLSearchParams(recoveryParamsSource.replace(/^[#?]/, ''));
+        const access_token = params.get('access_token');
+        const refresh_token = params.get('refresh_token');
+
+        if (access_token && refresh_token) {
+          const { error } = await supabase.auth.setSession({
+            access_token,
+            refresh_token,
+          });
+
+          if (!error) {
+            setIsPasswordRecovery(true);
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        }
+      }
+
+      // THEN get initial session
+      const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
       setUser(session?.user ?? null);
+ codex/add-email-and-password-to-whitelist-xq8fx8
+
+
       setIsPasswordRecovery(false);
       
+ main
       if (session?.user) {
-        supabase
+        const { data } = await supabase
           .from('user_roles')
           .select('role')
           .eq('user_id', session.user.id)
-          .single()
-          .then(({ data }) => {
-            setIsWhitelisted(!!data);
-            setIsLoading(false);
-          });
+          .single();
+        setIsWhitelisted(!!data);
       } else {
-        setIsLoading(false);
+        setIsWhitelisted(false);
       }
-    });
+
+      setIsLoading(false);
+    };
+
+    initializeSession();
 
     return () => subscription.unsubscribe();
   }, []);
