@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { NotWhitelisted } from "@/components/auth/NotWhitelisted";
@@ -17,6 +17,7 @@ const queryClient = new QueryClient();
 
 function AppRoutes() {
   const { user, isLoading, isWhitelisted, isPasswordRecovery } = useAuth();
+  const location = useLocation();
 
   if (isLoading) {
     return (
@@ -27,6 +28,9 @@ function AppRoutes() {
   }
 
   if (!user) {
+    if (location.pathname === "/reset-password") {
+      return <ResetPasswordPage />;
+    }
     return <LoginPage />;
   }
 
