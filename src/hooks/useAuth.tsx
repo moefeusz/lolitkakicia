@@ -7,8 +7,11 @@ interface AuthContextType {
   session: Session | null;
   isLoading: boolean;
   isWhitelisted: boolean;
+  isPasswordRecovery: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  resetPassword: (email: string) => Promise<{ error: Error | null }>;
+  updatePassword: (password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -19,6 +22,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isWhitelisted, setIsWhitelisted] = useState(false);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   useEffect(() => {
     // Set up auth state listener FIRST
@@ -26,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
+        setIsPasswordRecovery(event === 'PASSWORD_RECOVERY');
         
         if (session?.user) {
           // Check if user is whitelisted
@@ -44,25 +49,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    // THEN get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const initializeSession = async () => {
+      const hash = window.location.hash;
+      const hasRecoveryTokens =
+        hash.includes('access_token=') &&
+        hash.includes('refresh_token=') &&
+        hash.includes('type=recovery');
+
+      if (hasRecoveryTokens) {
+        const params = new URLSearchParams(hash.replace('#', ''));
+        const access_token = params.get('access_token');
+        const refresh_token = params.get('refresh_token');
+
+        if (access_token && refresh_token) {
+          const { error } = await supabase.auth.setSession({
+            access_token,
+            refresh_token,
+          });
+
+          if (!error) {
+            setIsPasswordRecovery(true);
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        }
+      }
+
+      // THEN get initial session
+      const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       if (session?.user) {
-        supabase
+        const { data } = await supabase
           .from('user_roles')
           .select('role')
           .eq('user_id', session.user.id)
-          .single()
-          .then(({ data }) => {
-            setIsWhitelisted(!!data);
-            setIsLoading(false);
-          });
+          .single();
+        setIsWhitelisted(!!data);
       } else {
-        setIsLoading(false);
+        setIsWhitelisted(false);
       }
-    });
+
+      setIsLoading(false);
+    };
+
+    initializeSession();
 
     return () => subscription.unsubscribe();
   }, []);
@@ -83,12 +114,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   };
 
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    return { error };
+  };
+
+  const updatePassword = async (password: string) => {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (!error) {
+      setIsPasswordRecovery(false);
+    }
+    return { error };
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
+    setIsPasswordRecovery(false);
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, isLoading, isWhitelisted, signIn, signUp, signOut }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        isLoading,
+        isWhitelisted,
+        isPasswordRecovery,
+        signIn,
+        signUp,
+        resetPassword,
+        updatePassword,
+        signOut,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -1,28 +1,51 @@
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { Wallet, Mail, Lock, AlertCircle } from 'lucide-react';
+import { Wallet, Mail, Lock, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [viewMode, setViewMode] = useState<'signin' | 'signup' | 'reset'>('signin');
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, resetPassword } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccess(null);
     setIsLoading(true);
 
     try {
-      const { error } = isSignUp
-        ? await signUp(email, password)
-        : await signIn(email, password);
+      const { error } =
+        viewMode === 'signup'
+          ? await signUp(email, password)
+          : await signIn(email, password);
 
       if (error) {
         setError(error.message);
+      }
+    } catch (err) {
+      setError('Wystąpił nieoczekiwany błąd');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setIsLoading(true);
+
+    try {
+      const { error } = await resetPassword(email);
+      if (error) {
+        setError(error.message);
+      } else {
+        setSuccess('Wysłaliśmy link do resetu hasła na podany adres.');
       }
     } catch (err) {
       setError('Wystąpił nieoczekiwany błąd');
@@ -46,11 +69,18 @@ export function LoginPage() {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={viewMode === 'reset' ? handleReset : handleSubmit} className="space-y-4">
           {error && (
             <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
               <AlertCircle className="h-4 w-4 flex-shrink-0" />
               <p>{error}</p>
+            </div>
+          )}
+
+          {success && (
+            <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 px-4 py-3 text-sm text-emerald-500">
+              <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+              <p>{success}</p>
             </div>
           )}
 
@@ -71,23 +101,25 @@ export function LoginPage() {
             </div>
           </div>
 
-          <div>
-            <label className="mb-2 block text-sm font-medium text-muted-foreground">
-              Hasło
-            </label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="input-field pl-10"
-                minLength={6}
-                required
-              />
+          {viewMode !== 'reset' && (
+            <div>
+              <label className="mb-2 block text-sm font-medium text-muted-foreground">
+                Hasło
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="input-field pl-10"
+                  minLength={6}
+                  required
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           <button
             type="submit"
@@ -96,19 +128,34 @@ export function LoginPage() {
           >
             {isLoading
               ? 'Ładowanie...'
-              : isSignUp
+              : viewMode === 'signup'
               ? 'Zarejestruj się'
+              : viewMode === 'reset'
+              ? 'Wyślij link resetu'
               : 'Zaloguj się'}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-muted-foreground">
-          {isSignUp ? 'Masz już konto?' : 'Nie masz konta?'}{' '}
+        {viewMode !== 'reset' && (
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            {viewMode === 'signup' ? 'Masz już konto?' : 'Nie masz konta?'}{' '}
+            <button
+              onClick={() =>
+                setViewMode(viewMode === 'signup' ? 'signin' : 'signup')
+              }
+              className="font-medium text-primary hover:underline"
+            >
+              {viewMode === 'signup' ? 'Zaloguj się' : 'Zarejestruj się'}
+            </button>
+          </p>
+        )}
+
+        <p className="mt-4 text-center text-sm text-muted-foreground">
           <button
-            onClick={() => setIsSignUp(!isSignUp)}
+            onClick={() => setViewMode(viewMode === 'reset' ? 'signin' : 'reset')}
             className="font-medium text-primary hover:underline"
           >
-            {isSignUp ? 'Zaloguj się' : 'Zarejestruj się'}
+            {viewMode === 'reset' ? 'Wróć do logowania' : 'Nie pamiętasz hasła?'}
           </button>
         </p>
 
