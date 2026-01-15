@@ -38,11 +38,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // First try to auto-whitelist if this email is in the allowlist.
       await ensureWhitelist();
 
-      const { data } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId)
-        .single();
+      // Prefer a backend function to avoid any RLS visibility issues on user_roles.
+      const { data, error } = await supabase.rpc('is_whitelisted', { _user_id: userId });
+
+      if (error) {
+        // Fall back to direct table check (may fail if RLS blocks it).
+        const { data: roleRow } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        setIsWhitelisted(!!roleRow);
+        return;
+      }
 
       setIsWhitelisted(!!data);
     };
