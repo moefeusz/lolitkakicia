@@ -89,12 +89,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
       setUser(session?.user ?? null);
- codex/add-email-and-password-to-whitelist-xq8fx8
-
-
-      setIsPasswordRecovery(false);
-      
- main
       if (session?.user) {
         const { data } = await supabase
           .from('user_roles')
