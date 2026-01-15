@@ -15,19 +15,26 @@ Deno.serve(async (req) => {
 
   try {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
-    const SUPABASE_PUBLISHABLE_KEY = Deno.env.get('SUPABASE_PUBLISHABLE_KEY')
+    const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
-    if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
       return new Response(
-        JSON.stringify({ error: 'Missing server configuration' }),
+        JSON.stringify({
+          error: 'Missing server configuration',
+          missing: {
+            SUPABASE_URL: !SUPABASE_URL,
+            SUPABASE_ANON_KEY: !SUPABASE_ANON_KEY,
+            SUPABASE_SERVICE_ROLE_KEY: !SUPABASE_SERVICE_ROLE_KEY,
+          },
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
 
     const authHeader = req.headers.get('Authorization') ?? ''
 
-    const userClient = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
       auth: { persistSession: false },
     })
