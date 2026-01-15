@@ -25,29 +25,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   useEffect(() => {
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setIsPasswordRecovery(event === 'PASSWORD_RECOVERY');
-        
-        if (session?.user) {
-          // Check if user is whitelisted
-          const { data } = await supabase
-            .from('user_roles')
-            .select('role')
-            .eq('user_id', session.user.id)
-            .single();
-          
-          setIsWhitelisted(!!data);
-        } else {
-          setIsWhitelisted(false);
-        }
-        
-        setIsLoading(false);
+    const ensureWhitelist = async () => {
+      try {
+        // If the function is not deployed yet, ignore the error and fall back to role check.
+        await supabase.functions.invoke('ensure-whitelist');
+      } catch {
+        // no-op
       }
-    );
+    };
+
+    const checkWhitelist = async (userId: string) => {
+      // First try to auto-whitelist if this email is in the allowlist.
+      await ensureWhitelist();
+
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .single();
+
+      setIsWhitelisted(!!data);
+    };
+
+    // Set up auth state listener FIRST
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setIsPasswordRecovery(event === 'PASSWORD_RECOVERY');
+
+      if (session?.user) {
+        await checkWhitelist(session.user.id);
+      } else {
+        setIsWhitelisted(false);
+      }
+
+      setIsLoading(false);
+    });
 
     const initializeSession = async () => {
       const hash = window.location.hash;
@@ -86,16 +101,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // THEN get initial session
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       setSession(session);
       setUser(session?.user ?? null);
+
       if (session?.user) {
-        const { data } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', session.user.id)
-          .single();
-        setIsWhitelisted(!!data);
+        await checkWhitelist(session.user.id);
       } else {
         setIsWhitelisted(false);
       }

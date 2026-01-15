@@ -19,13 +19,15 @@ export function LoginPage() {
     setIsLoading(true);
 
     try {
-      const { error } =
+      const result =
         viewMode === 'signup'
           ? await signUp(email, password)
           : await signIn(email, password);
 
-      if (error) {
-        setError(error.message);
+      if (result.error) {
+        setError(result.error.message);
+      } else if (viewMode === 'signup') {
+        setSuccess('Konto utworzone. Jeśli nie zostałeś zalogowany, sprawdź maila i potwierdź rejestrację.');
       }
     } catch (err) {
       setError('Wystąpił nieoczekiwany błąd');
