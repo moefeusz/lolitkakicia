@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { X, TrendingUp, TrendingDown, Target } from 'lucide-react';
-import { TransactionType, ExpenseCategory, PersonType, EXPENSE_CATEGORIES, PERSONS } from '@/lib/types';
+import { TransactionType, ExpenseCategory, EXPENSE_CATEGORIES } from '@/lib/types';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useGoals } from '@/hooks/useGoals';
 
@@ -16,10 +16,8 @@ export function AddTransactionModal({ isOpen, onClose, defaultType }: AddTransac
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<ExpenseCategory>('inne');
   const [subCategory, setSubCategory] = useState('');
-  const [person, setPerson] = useState<PersonType>('Konki');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [note, setNote] = useState('');
-  const [goalId, setGoalId] = useState<string>('');
 
   const { createTransaction, isCreating } = useTransactions();
   const { goals } = useGoals();
@@ -30,7 +28,6 @@ export function AddTransactionModal({ isOpen, onClose, defaultType }: AddTransac
     setCategory('inne');
     setSubCategory('');
     setNote('');
-    setGoalId('');
   };
 
   const handleClose = () => {
@@ -48,16 +45,34 @@ export function AddTransactionModal({ isOpen, onClose, defaultType }: AddTransac
     
     if (!amount || Number(amount) <= 0) return;
 
-    createTransaction({
-      type,
-      amount: Number(amount),
-      category: type === 'expense' ? category : null,
-      sub_category: type === 'expense' ? subCategory || null : null,
-      person,
-      date,
-      note: note || null,
-      goal_id: type === 'savings' ? goalId || null : null,
-    });
+    if (type === 'savings') {
+      // Auto-split 50/50 between goals
+      const halfAmount = Number(amount) / 2;
+      
+      goals.forEach((goal) => {
+        createTransaction({
+          type: 'savings',
+          amount: halfAmount,
+          category: null,
+          sub_category: null,
+          person: 'Konki', // Default person
+          date,
+          note: note ? `${note} (${goal.name})` : goal.name,
+          goal_id: goal.id,
+        });
+      });
+    } else {
+      createTransaction({
+        type,
+        amount: Number(amount),
+        category: type === 'expense' ? category : null,
+        sub_category: type === 'expense' ? subCategory || null : null,
+        person: 'Konki', // Default person
+        date,
+        note: note || null,
+        goal_id: null,
+      });
+    }
 
     handleClose();
   };
@@ -191,49 +206,19 @@ export function AddTransactionModal({ isOpen, onClose, defaultType }: AddTransac
                 </div>
               )}
 
-              {/* Goal - only for savings */}
-              {type === 'savings' && (
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-muted-foreground">
-                    Cel
-                  </label>
-                  <select
-                    value={goalId}
-                    onChange={(e) => setGoalId(e.target.value)}
-                    className="input-field"
-                  >
-                    <option value="">Bez przypisania do celu</option>
+              {/* Info about auto-split for savings */}
+              {type === 'savings' && goals.length > 0 && (
+                <div className="rounded-lg bg-primary/10 border border-primary/20 p-3">
+                  <p className="text-sm text-muted-foreground">
+                    💡 Kwota zostanie automatycznie podzielona 50/50 między cele:
+                  </p>
+                  <ul className="mt-1 text-sm font-medium text-foreground">
                     {goals.map((goal) => (
-                      <option key={goal.id} value={goal.id}>
-                        {goal.name}
-                      </option>
+                      <li key={goal.id}>• {goal.name}</li>
                     ))}
-                  </select>
+                  </ul>
                 </div>
               )}
-
-              {/* Person */}
-              <div>
-                <label className="mb-2 block text-sm font-medium text-muted-foreground">
-                  Osoba
-                </label>
-                <div className="flex gap-2">
-                  {PERSONS.map((p) => (
-                    <button
-                      key={p.value}
-                      type="button"
-                      onClick={() => setPerson(p.value)}
-                      className={`flex-1 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
-                        person === p.value
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
 
               {/* Date */}
               <div>
