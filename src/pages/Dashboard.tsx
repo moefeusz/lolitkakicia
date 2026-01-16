@@ -86,17 +86,16 @@ export default function Dashboard() {
                 trend="positive"
               />
               <StatCard
-                label="Wydatki"
+             label="Wydatki"
                 value={formatCurrency(expenses)}
                 icon={<TrendingDown className="h-5 w-5" />}
                 trend="negative"
-              />
-              <StatCard
-                label="Oszczędności"
-                value={formatCurrency(savings)}
-                icon={<PiggyBank className="h-5 w-5" />}
-                trend="neutral"
-              />
+    {/*
+ * Removed the savings card from the dashboard.  The dashboard now
+ * focuses on income, expenses and overall balance only.
+ */}}
+
+        />
               <StatCard
                 label="Bilans"
                 value={formatCurrency(balance)}
