@@ -1,14 +1,21 @@
 import { useState } from 'react';
-import { Plus, Target, TrendingUp } from 'lucide-react';
+import { Plus, Target, TrendingUp, Trash2, ChevronRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { GoalProgress } from '@/components/dashboard/GoalProgress';
 import { TransactionList } from '@/components/dashboard/TransactionList';
 import { AddTransactionModal } from '@/components/forms/AddTransactionModal';
 import { useGoals } from '@/hooks/useGoals';
+import { useTransactions } from '@/hooks/useTransactions';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function Goals() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { goals, getGoalProgress, savings, isLoading } = useGoals();
+  const { deleteTransaction } = useTransactions();
+  const queryClient = useQueryClient();
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('pl-PL', {
@@ -20,6 +27,39 @@ export default function Goals() {
   };
 
   const totalSaved = savings.reduce((sum, s) => sum + Number(s.amount), 0);
+
+  const handleDeleteGoal = async (goalId: string) => {
+    if (!confirm('Czy na pewno chcesz usunąć ten cel? Wpłaty pozostaną w historii.')) return;
+
+    try {
+      // First, unlink savings from this goal
+      await supabase
+        .from('transactions')
+        .update({ goal_id: null })
+        .eq('goal_id', goalId);
+
+      // Then delete the goal
+      const { error } = await supabase
+        .from('goals')
+        .delete()
+        .eq('id', goalId);
+
+      if (error) throw error;
+
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      queryClient.invalidateQueries({ queryKey: ['goal-savings'] });
+      toast.success('Cel usunięty');
+    } catch (error) {
+      toast.error('Błąd przy usuwaniu celu');
+      console.error(error);
+    }
+  };
+
+  const handleDeleteSaving = (id: string) => {
+    if (!confirm('Czy na pewno chcesz usunąć tę wpłatę?')) return;
+    deleteTransaction(id);
+    queryClient.invalidateQueries({ queryKey: ['goal-savings'] });
+  };
 
   return (
     <AppLayout>
@@ -51,11 +91,26 @@ export default function Goals() {
               ) : (
                 <div className="space-y-3">
                   {goals.map((goal) => (
-                    <GoalProgress
-                      key={goal.id}
-                      goal={goal}
-                      currentAmount={getGoalProgress(goal.id)}
-                    />
+                    <div key={goal.id} className="relative group">
+                      <Link to={`/goals/${goal.id}`}>
+                        <GoalProgress
+                          goal={goal}
+                          currentAmount={getGoalProgress(goal.id)}
+                        />
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-50 group-hover:opacity-100 transition-opacity">
+                          <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                      </Link>
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleDeleteGoal(goal.id);
+                        }}
+                        className="absolute right-12 top-1/2 -translate-y-1/2 rounded-lg p-2 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -71,6 +126,9 @@ export default function Goals() {
                 transactions={savings.sort((a, b) => 
                   new Date(b.date).getTime() - new Date(a.date).getTime()
                 )}
+                showDelete
+                showEdit
+                onDelete={handleDeleteSaving}
               />
             </div>
           </>

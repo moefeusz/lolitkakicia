@@ -1,15 +1,25 @@
-import { TrendingUp, TrendingDown, PiggyBank, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { TrendingUp, TrendingDown, PiggyBank, Trash2, Pencil } from 'lucide-react';
 import { Transaction, EXPENSE_CATEGORIES } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { EditTransactionModal } from '@/components/forms/EditTransactionModal';
 
 interface TransactionListProps {
   transactions: Transaction[];
   onDelete?: (id: string) => void;
   showDelete?: boolean;
+  showEdit?: boolean;
   limit?: number;
 }
 
-export function TransactionList({ transactions, onDelete, showDelete = false, limit }: TransactionListProps) {
+export function TransactionList({ 
+  transactions, 
+  onDelete, 
+  showDelete = false, 
+  showEdit = false,
+  limit 
+}: TransactionListProps) {
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const displayTransactions = limit ? transactions.slice(0, limit) : transactions;
 
   const formatCurrency = (amount: number) => {
@@ -66,57 +76,74 @@ export function TransactionList({ transactions, onDelete, showDelete = false, li
   }
 
   return (
-    <div className="space-y-2">
-      {displayTransactions.map((transaction, index) => (
-        <div
-          key={transaction.id}
-          className="transaction-row animate-fade-in"
-          style={{ animationDelay: `${index * 50}ms` }}
-        >
-          <div className={cn('rounded-lg p-2', getTypeColor(transaction.type))}>
-            {getIcon(transaction.type)}
-          </div>
-          
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-medium text-foreground truncate">
-                {transaction.person}
-              </span>
-              {transaction.category && (
-                <span className="rounded-md bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
-                  {getCategoryLabel(transaction.category)}
+    <>
+      <div className="space-y-2">
+        {displayTransactions.map((transaction, index) => (
+          <div
+            key={transaction.id}
+            className="transaction-row animate-fade-in"
+            style={{ animationDelay: `${index * 50}ms` }}
+          >
+            <div className={cn('rounded-lg p-2', getTypeColor(transaction.type))}>
+              {getIcon(transaction.type)}
+            </div>
+            
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-foreground truncate">
+                  {transaction.person}
                 </span>
+                {transaction.category && (
+                  <span className="rounded-md bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
+                    {getCategoryLabel(transaction.category)}
+                  </span>
+                )}
+              </div>
+              {transaction.note && (
+                <p className="text-sm text-muted-foreground truncate">{transaction.note}</p>
               )}
             </div>
-            {transaction.note && (
-              <p className="text-sm text-muted-foreground truncate">{transaction.note}</p>
+            
+            <div className="text-right">
+              <p
+                className={cn('font-mono font-semibold', {
+                  'text-primary': transaction.type === 'income',
+                  'text-destructive': transaction.type === 'expense',
+                  'text-warning': transaction.type === 'savings',
+                })}
+              >
+                {transaction.type === 'income' ? '+' : '-'}
+                {formatCurrency(Number(transaction.amount))}
+              </p>
+              <p className="text-xs text-muted-foreground">{formatDate(transaction.date)}</p>
+            </div>
+            
+            {showEdit && (
+              <button
+                onClick={() => setEditingTransaction(transaction)}
+                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            )}
+            
+            {showDelete && onDelete && (
+              <button
+                onClick={() => onDelete(transaction.id)}
+                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
             )}
           </div>
-          
-          <div className="text-right">
-            <p
-              className={cn('font-mono font-semibold', {
-                'text-primary': transaction.type === 'income',
-                'text-destructive': transaction.type === 'expense',
-                'text-warning': transaction.type === 'savings',
-              })}
-            >
-              {transaction.type === 'income' ? '+' : '-'}
-              {formatCurrency(Number(transaction.amount))}
-            </p>
-            <p className="text-xs text-muted-foreground">{formatDate(transaction.date)}</p>
-          </div>
-          
-          {showDelete && onDelete && (
-            <button
-              onClick={() => onDelete(transaction.id)}
-              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+      
+      <EditTransactionModal
+        transaction={editingTransaction}
+        isOpen={!!editingTransaction}
+        onClose={() => setEditingTransaction(null)}
+      />
+    </>
   );
 }
