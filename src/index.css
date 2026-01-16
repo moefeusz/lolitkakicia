@@ -225,7 +225,7 @@
   }
   
   .fab-button {
-    @apply fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-all duration-200;
+    @apply fixed bottom-24 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-all duration-200;
     background: var(--gradient-primary);
     box-shadow: var(--shadow-glow);
   }
