@@ -90,12 +90,13 @@ export default function Dashboard() {
                 value={formatCurrency(expenses)}
                 icon={<TrendingDown className="h-5 w-5" />}
                 trend="negative"
-    {/*
+                      />
+    {/* 
  * Removed the savings card from the dashboard.  The dashboard now
  * focuses on income, expenses and overall balance only.
  */}}
 
-        />
+    
               <StatCard
                 label="Bilans"
                 value={formatCurrency(balance)}
