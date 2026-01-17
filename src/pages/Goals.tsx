@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Plus, Target, TrendingUp, Trash2, ChevronRight } from 'lucide-react';
+import { Plus, Target, TrendingUp, Trash2, ChevronRight, PlusCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { GoalProgress } from '@/components/dashboard/GoalProgress';
 import { TransactionList } from '@/components/dashboard/TransactionList';
 import { AddTransactionModal } from '@/components/forms/AddTransactionModal';
+import { AddGoalModal } from '@/components/forms/AddGoalModal';
 import { useGoals } from '@/hooks/useGoals';
 import { useTransactions } from '@/hooks/useTransactions';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,6 +14,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 export default function Goals() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const { goals, getGoalProgress, savings, isLoading } = useGoals();
   const { deleteTransaction } = useTransactions();
   const queryClient = useQueryClient();
@@ -80,10 +82,19 @@ export default function Goals() {
           <>
             {/* Goals */}
             <div className="mb-8">
-              <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-foreground">
-                <Target className="h-5 w-5 text-primary" />
-                Twoje cele
-              </h2>
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                  <Target className="h-5 w-5 text-primary" />
+                  Twoje cele
+                </h2>
+                <button
+                  onClick={() => setIsGoalModalOpen(true)}
+                  className="flex items-center gap-1 rounded-lg bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
+                >
+                  <PlusCircle className="h-4 w-4" />
+                  Nowy cel
+                </button>
+              </div>
               {goals.length === 0 ? (
                 <div className="rounded-xl bg-card/50 border border-border p-8 text-center">
                   <p className="text-muted-foreground">Brak zdefiniowanych celów</p>
@@ -147,6 +158,12 @@ export default function Goals() {
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           defaultType="savings"
+        />
+
+        {/* Add Goal Modal */}
+        <AddGoalModal
+          isOpen={isGoalModalOpen}
+          onClose={() => setIsGoalModalOpen(false)}
         />
       </div>
     </AppLayout>
