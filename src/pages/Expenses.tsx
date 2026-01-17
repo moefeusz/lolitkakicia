@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { MonthSelector } from '@/components/dashboard/MonthSelector';
+import { DateRangeFilter } from '@/components/dashboard/DateRangeFilter';
 import { TransactionList } from '@/components/dashboard/TransactionList';
 import { AddTransactionModal } from '@/components/forms/AddTransactionModal';
 import { useTransactions } from '@/hooks/useTransactions';
@@ -13,6 +14,8 @@ export default function Expenses() {
   const [year, setYear] = useState(now.getFullYear());
   const [personFilter, setPersonFilter] = useState<PersonType | 'all'>('all');
   const [categoryFilter, setCategoryFilter] = useState<ExpenseCategory | 'all'>('all');
+  const [startDate, setStartDate] = useState<Date | undefined>();
+  const [endDate, setEndDate] = useState<Date | undefined>();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const { transactions, isLoading, deleteTransaction } = useTransactions(month, year);
@@ -20,7 +23,14 @@ export default function Expenses() {
   const expenseTransactions = transactions
     .filter((t) => t.type === 'expense')
     .filter((t) => personFilter === 'all' || t.person === personFilter)
-    .filter((t) => categoryFilter === 'all' || t.category === categoryFilter);
+    .filter((t) => categoryFilter === 'all' || t.category === categoryFilter)
+    .filter((t) => {
+      if (!startDate && !endDate) return true;
+      const txDate = new Date(t.date);
+      if (startDate && txDate < startDate) return false;
+      if (endDate && txDate > endDate) return false;
+      return true;
+    });
 
   const total = expenseTransactions.reduce((sum, t) => sum + Number(t.amount), 0);
 
@@ -52,6 +62,18 @@ export default function Expenses() {
             onChange={(m, y) => {
               setMonth(m);
               setYear(y);
+            }}
+          />
+        </div>
+
+        {/* Date Range Filter */}
+        <div className="mb-4">
+          <DateRangeFilter
+            startDate={startDate}
+            endDate={endDate}
+            onChange={(start, end) => {
+              setStartDate(start);
+              setEndDate(end);
             }}
           />
         </div>
@@ -122,6 +144,7 @@ export default function Expenses() {
             transactions={expenseTransactions}
             onDelete={deleteTransaction}
             showDelete
+            showEdit
           />
         )}
 
