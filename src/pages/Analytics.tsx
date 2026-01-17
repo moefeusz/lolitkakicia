@@ -2,7 +2,20 @@ import { useState, useMemo } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useTransactions } from '@/hooks/useTransactions';
 import { EXPENSE_CATEGORIES } from '@/lib/types';
-import { BarChart3, LineChart as LineChartIcon, PieChart, TrendingUp, Calendar } from 'lucide-react';
+import { 
+  BarChart3, 
+  LineChart as LineChartIcon, 
+  PieChart, 
+  TrendingUp, 
+  Calendar, 
+  Sparkles,
+  AlertTriangle,
+  CheckCircle,
+  ArrowUp,
+  ArrowDown,
+  Minus,
+  Loader2
+} from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -18,16 +31,49 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 type ChartType = 'line' | 'bar' | 'pie';
-type ViewType = 'monthly' | 'yearly';
 
-const COLORS = ['#22c55e', '#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6', '#ec4899'];
+const COLORS = ['#22c55e', '#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
+
+const MONTHS = [
+  { value: 0, label: 'Sty' },
+  { value: 1, label: 'Lut' },
+  { value: 2, label: 'Mar' },
+  { value: 3, label: 'Kwi' },
+  { value: 4, label: 'Maj' },
+  { value: 5, label: 'Cze' },
+  { value: 6, label: 'Lip' },
+  { value: 7, label: 'Sie' },
+  { value: 8, label: 'Wrz' },
+  { value: 9, label: 'Paź' },
+  { value: 10, label: 'Lis' },
+  { value: 11, label: 'Gru' },
+];
+
+interface AIAnalysis {
+  trendAnalysis: string;
+  topInsights: string[];
+  suggestions: string[];
+  riskLevel: 'niski' | 'średni' | 'wysoki';
+  savingsRate: string;
+  biggestExpenseCategory: string;
+  monthlyTrend: 'rosnący' | 'malejący' | 'stabilny';
+}
 
 export default function Analytics() {
-  const [chartType, setChartType] = useState<ChartType>('line');
-  const [viewType, setViewType] = useState<ViewType>('monthly');
+  const [chartType, setChartType] = useState<ChartType>('bar');
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonths, setSelectedMonths] = useState<number[]>([
+    new Date().getMonth(),
+    Math.max(0, new Date().getMonth() - 1),
+    Math.max(0, new Date().getMonth() - 2),
+    Math.max(0, new Date().getMonth() - 3),
+  ].sort((a, b) => a - b));
+  const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   
   const { transactions, isLoading } = useTransactions();
 
@@ -40,12 +86,24 @@ export default function Analytics() {
     }).format(value);
   };
 
-  // Monthly trend data
-  const monthlyData = useMemo(() => {
+  const toggleMonth = (monthIndex: number) => {
+    setSelectedMonths(prev => {
+      if (prev.includes(monthIndex)) {
+        if (prev.length <= 1) return prev; // Keep at least one
+        return prev.filter(m => m !== monthIndex);
+      }
+      return [...prev, monthIndex].sort((a, b) => a - b);
+    });
+    setAiAnalysis(null); // Reset analysis when selection changes
+  };
+
+  // All monthly data for the year
+  const allMonthlyData = useMemo(() => {
     const months = Array.from({ length: 12 }, (_, i) => {
       const month = new Date(selectedYear, i, 1);
       return {
         name: month.toLocaleDateString('pl-PL', { month: 'short' }),
+        fullName: month.toLocaleDateString('pl-PL', { month: 'long' }),
         month: i,
         income: 0,
         expenses: 0,
@@ -77,15 +135,22 @@ export default function Analytics() {
     return months;
   }, [transactions, selectedYear]);
 
-  // Category breakdown
+  // Filtered data based on selected months
+  const filteredMonthlyData = useMemo(() => {
+    return allMonthlyData.filter(m => selectedMonths.includes(m.month));
+  }, [allMonthlyData, selectedMonths]);
+
+  // Category breakdown for selected months
   const categoryData = useMemo(() => {
-    const yearTransactions = transactions.filter((t) => {
+    const selectedTransactions = transactions.filter((t) => {
       const date = new Date(t.date);
-      return date.getFullYear() === selectedYear && t.type === 'expense';
+      return date.getFullYear() === selectedYear && 
+             selectedMonths.includes(date.getMonth()) && 
+             t.type === 'expense';
     });
 
     const totals: Record<string, number> = {};
-    yearTransactions.forEach((t) => {
+    selectedTransactions.forEach((t) => {
       const cat = t.category || 'inne';
       totals[cat] = (totals[cat] || 0) + Number(t.amount);
     });
@@ -95,55 +160,91 @@ export default function Analytics() {
       value: totals[cat.value] || 0,
       color: COLORS[index % COLORS.length],
     })).filter((item) => item.value > 0);
-  }, [transactions, selectedYear]);
+  }, [transactions, selectedYear, selectedMonths]);
 
-  // Year summary
-  const yearSummary = useMemo(() => {
-    const totalIncome = monthlyData.reduce((sum, m) => sum + m.income, 0);
-    const totalExpenses = monthlyData.reduce((sum, m) => sum + m.expenses, 0);
-    const totalSavings = monthlyData.reduce((sum, m) => sum + m.savings, 0);
+  // Summary for selected months
+  const summary = useMemo(() => {
+    const totalIncome = filteredMonthlyData.reduce((sum, m) => sum + m.income, 0);
+    const totalExpenses = filteredMonthlyData.reduce((sum, m) => sum + m.expenses, 0);
+    const totalSavings = filteredMonthlyData.reduce((sum, m) => sum + m.savings, 0);
     const totalBalance = totalIncome - totalExpenses - totalSavings;
+    const avgMonthlyExpense = totalExpenses / (filteredMonthlyData.length || 1);
+    const avgMonthlyIncome = totalIncome / (filteredMonthlyData.length || 1);
 
-    return { totalIncome, totalExpenses, totalSavings, totalBalance };
-  }, [monthlyData]);
-
-  // Month to month comparison
-  const comparisonData = useMemo(() => {
-    const currentMonth = new Date().getMonth();
-    const current = monthlyData[currentMonth];
-    const previous = currentMonth > 0 ? monthlyData[currentMonth - 1] : null;
-
-    if (!previous) return null;
-
-    return {
-      incomeChange: current.income - previous.income,
-      expenseChange: current.expenses - previous.expenses,
-      savingsChange: current.savings - previous.savings,
-    };
-  }, [monthlyData]);
+    return { totalIncome, totalExpenses, totalSavings, totalBalance, avgMonthlyExpense, avgMonthlyIncome };
+  }, [filteredMonthlyData]);
 
   const years = useMemo(() => {
     const currentYear = new Date().getFullYear();
     return [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
   }, []);
 
+  const handleAnalyze = async () => {
+    if (filteredMonthlyData.length === 0) {
+      toast.error('Wybierz przynajmniej jeden miesiąc');
+      return;
+    }
+
+    setIsAnalyzing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-finances', {
+        body: {
+          monthlyData: filteredMonthlyData,
+          categoryData,
+          selectedMonths: filteredMonthlyData.map(m => m.fullName),
+          totalIncome: summary.totalIncome,
+          totalExpenses: summary.totalExpenses,
+          totalSavings: summary.totalSavings,
+        },
+      });
+
+      if (error) throw error;
+      setAiAnalysis(data);
+      toast.success('Analiza zakończona!');
+    } catch (error) {
+      console.error('Analysis error:', error);
+      toast.error('Błąd podczas analizy');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const getRiskIcon = (risk: string) => {
+    switch (risk) {
+      case 'niski': return <CheckCircle className="h-5 w-5 text-primary" />;
+      case 'średni': return <AlertTriangle className="h-5 w-5 text-warning" />;
+      case 'wysoki': return <AlertTriangle className="h-5 w-5 text-destructive" />;
+      default: return null;
+    }
+  };
+
+  const getTrendIcon = (trend: string) => {
+    switch (trend) {
+      case 'rosnący': return <ArrowUp className="h-4 w-4 text-primary" />;
+      case 'malejący': return <ArrowDown className="h-4 w-4 text-destructive" />;
+      default: return <Minus className="h-4 w-4 text-muted-foreground" />;
+    }
+  };
+
   return (
     <AppLayout>
-      <div className="container max-w-4xl px-4">
+      <div className="container max-w-4xl px-4 pb-8">
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-foreground">Analityka</h1>
-          <p className="text-sm text-muted-foreground">Wykresy i trendy finansowe</p>
+          <p className="text-sm text-muted-foreground">Wybierz miesiące i analizuj trendy z AI</p>
         </div>
 
-        {/* Controls */}
-        <div className="mb-6 flex flex-wrap gap-3">
-          {/* Year selector */}
-          <div className="flex items-center gap-2 rounded-lg bg-secondary p-1">
+        {/* Year selector */}
+        <div className="mb-4">
+          <div className="flex items-center gap-2 rounded-lg bg-secondary p-1 w-fit">
             {years.map((year) => (
               <button
                 key={year}
-                onClick={() => setSelectedYear(year)}
+                onClick={() => {
+                  setSelectedYear(year);
+                  setAiAnalysis(null);
+                }}
                 className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                   selectedYear === year
                     ? 'bg-primary text-primary-foreground'
@@ -154,40 +255,29 @@ export default function Analytics() {
               </button>
             ))}
           </div>
+        </div>
 
-          {/* Chart type */}
-          <div className="flex items-center gap-1 rounded-lg bg-secondary p-1">
-            <button
-              onClick={() => setChartType('line')}
-              className={`rounded-md p-2 transition-colors ${
-                chartType === 'line'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <LineChartIcon className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setChartType('bar')}
-              className={`rounded-md p-2 transition-colors ${
-                chartType === 'bar'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <BarChart3 className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setChartType('pie')}
-              className={`rounded-md p-2 transition-colors ${
-                chartType === 'pie'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <PieChart className="h-4 w-4" />
-            </button>
+        {/* Month selector */}
+        <div className="mb-6">
+          <p className="text-sm font-medium text-foreground mb-2">Wybierz miesiące do analizy:</p>
+          <div className="flex flex-wrap gap-2">
+            {MONTHS.map((month) => (
+              <button
+                key={month.value}
+                onClick={() => toggleMonth(month.value)}
+                className={`rounded-lg px-3 py-2 text-sm font-medium transition-all ${
+                  selectedMonths.includes(month.value)
+                    ? 'bg-primary text-primary-foreground shadow-md'
+                    : 'bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground'
+                }`}
+              >
+                {month.label}
+              </button>
+            ))}
           </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Wybrano: {selectedMonths.length} {selectedMonths.length === 1 ? 'miesiąc' : selectedMonths.length < 5 ? 'miesiące' : 'miesięcy'}
+          </p>
         </div>
 
         {isLoading ? (
@@ -196,67 +286,170 @@ export default function Analytics() {
           </div>
         ) : (
           <>
-            {/* Year summary cards */}
+            {/* Summary cards */}
             <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="stat-card">
-                <p className="stat-label">Wpływy {selectedYear}</p>
-                <p className="stat-value text-xl text-primary">{formatCurrency(yearSummary.totalIncome)}</p>
+                <p className="stat-label">Wpływy</p>
+                <p className="stat-value text-lg text-primary">{formatCurrency(summary.totalIncome)}</p>
+                <p className="text-xs text-muted-foreground">śr. {formatCurrency(summary.avgMonthlyIncome)}/mies.</p>
               </div>
               <div className="stat-card">
-                <p className="stat-label">Wydatki {selectedYear}</p>
-                <p className="stat-value text-xl text-destructive">{formatCurrency(yearSummary.totalExpenses)}</p>
+                <p className="stat-label">Wydatki</p>
+                <p className="stat-value text-lg text-destructive">{formatCurrency(summary.totalExpenses)}</p>
+                <p className="text-xs text-muted-foreground">śr. {formatCurrency(summary.avgMonthlyExpense)}/mies.</p>
               </div>
               <div className="stat-card">
-                <p className="stat-label">Oszczędności {selectedYear}</p>
-                <p className="stat-value text-xl text-warning">{formatCurrency(yearSummary.totalSavings)}</p>
+                <p className="stat-label">Oszczędności</p>
+                <p className="stat-value text-lg text-warning">{formatCurrency(summary.totalSavings)}</p>
               </div>
               <div className="stat-card">
-                <p className="stat-label">Bilans {selectedYear}</p>
-                <p className={`stat-value text-xl ${yearSummary.totalBalance >= 0 ? 'text-primary' : 'text-destructive'}`}>
-                  {formatCurrency(yearSummary.totalBalance)}
+                <p className="stat-label">Bilans</p>
+                <p className={`stat-value text-lg ${summary.totalBalance >= 0 ? 'text-primary' : 'text-destructive'}`}>
+                  {formatCurrency(summary.totalBalance)}
                 </p>
               </div>
             </div>
 
-            {/* Month comparison */}
-            {comparisonData && (
-              <div className="mb-6 rounded-xl bg-card border border-border p-4">
-                <h3 className="mb-3 flex items-center gap-2 font-semibold">
-                  <TrendingUp className="h-4 w-4 text-primary" />
-                  Porównanie z poprzednim miesiącem
-                </h3>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Wpływy</p>
-                    <p className={`font-mono font-semibold ${comparisonData.incomeChange >= 0 ? 'text-primary' : 'text-destructive'}`}>
-                      {comparisonData.incomeChange >= 0 ? '+' : ''}{formatCurrency(comparisonData.incomeChange)}
-                    </p>
+            {/* AI Analysis Button */}
+            <button
+              onClick={handleAnalyze}
+              disabled={isAnalyzing}
+              className="mb-6 w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-primary/80 py-3 px-4 font-semibold text-primary-foreground transition-all hover:opacity-90 disabled:opacity-50"
+            >
+              {isAnalyzing ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Analizuję...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-5 w-5" />
+                  Generuj analizę AI dla wybranych miesięcy
+                </>
+              )}
+            </button>
+
+            {/* AI Analysis Results */}
+            {aiAnalysis && (
+              <div className="mb-6 space-y-4">
+                {/* Trend Analysis */}
+                <div className="rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 p-4">
+                  <div className="flex items-start gap-3">
+                    <Sparkles className="h-5 w-5 text-primary mt-0.5" />
+                    <div>
+                      <h3 className="font-semibold text-foreground mb-1">Analiza trendu</h3>
+                      <p className="text-sm text-muted-foreground">{aiAnalysis.trendAnalysis}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Wydatki</p>
-                    <p className={`font-mono font-semibold ${comparisonData.expenseChange <= 0 ? 'text-primary' : 'text-destructive'}`}>
-                      {comparisonData.expenseChange >= 0 ? '+' : ''}{formatCurrency(comparisonData.expenseChange)}
-                    </p>
+                </div>
+
+                {/* Quick stats */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-xl bg-card border border-border p-3 text-center">
+                    <div className="flex justify-center mb-1">
+                      {getRiskIcon(aiAnalysis.riskLevel)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Ryzyko</p>
+                    <p className="font-semibold capitalize">{aiAnalysis.riskLevel}</p>
                   </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Oszczędności</p>
-                    <p className={`font-mono font-semibold ${comparisonData.savingsChange >= 0 ? 'text-primary' : 'text-destructive'}`}>
-                      {comparisonData.savingsChange >= 0 ? '+' : ''}{formatCurrency(comparisonData.savingsChange)}
-                    </p>
+                  <div className="rounded-xl bg-card border border-border p-3 text-center">
+                    <div className="flex justify-center mb-1">
+                      {getTrendIcon(aiAnalysis.monthlyTrend)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Trend</p>
+                    <p className="font-semibold capitalize">{aiAnalysis.monthlyTrend}</p>
                   </div>
+                  <div className="rounded-xl bg-card border border-border p-3 text-center">
+                    <p className="text-lg font-bold text-primary">{aiAnalysis.savingsRate}</p>
+                    <p className="text-xs text-muted-foreground">Stopa oszczędności</p>
+                  </div>
+                </div>
+
+                {/* Insights */}
+                <div className="rounded-xl bg-card border border-border p-4">
+                  <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-primary" />
+                    Kluczowe wnioski
+                  </h3>
+                  <ul className="space-y-2">
+                    {aiAnalysis.topInsights.map((insight, index) => (
+                      <li key={index} className="flex items-start gap-2 text-sm">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
+                          {index + 1}
+                        </span>
+                        <span className="text-muted-foreground">{insight}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Suggestions */}
+                <div className="rounded-xl bg-card border border-border p-4">
+                  <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-primary" />
+                    Sugestie
+                  </h3>
+                  <ul className="space-y-2">
+                    {aiAnalysis.suggestions.map((suggestion, index) => (
+                      <li key={index} className="flex items-start gap-2 text-sm">
+                        <span className="text-primary">→</span>
+                        <span className="text-muted-foreground">{suggestion}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </div>
             )}
 
+            {/* Chart type selector */}
+            <div className="mb-4 flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Wykres:</span>
+              <div className="flex items-center gap-1 rounded-lg bg-secondary p-1">
+                <button
+                  onClick={() => setChartType('bar')}
+                  className={`rounded-md p-2 transition-colors ${
+                    chartType === 'bar'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  title="Słupkowy"
+                >
+                  <BarChart3 className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setChartType('line')}
+                  className={`rounded-md p-2 transition-colors ${
+                    chartType === 'line'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  title="Liniowy"
+                >
+                  <LineChartIcon className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setChartType('pie')}
+                  className={`rounded-md p-2 transition-colors ${
+                    chartType === 'pie'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  title="Kołowy"
+                >
+                  <PieChart className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
             {/* Main chart */}
             <div className="mb-6 rounded-xl bg-card border border-border p-4">
               <h3 className="mb-4 font-semibold">
-                {chartType === 'pie' ? 'Wydatki wg kategorii' : 'Trend roczny'}
+                {chartType === 'pie' ? 'Wydatki wg kategorii' : 'Porównanie wybranych miesięcy'}
               </h3>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   {chartType === 'line' ? (
-                    <LineChart data={monthlyData}>
+                    <LineChart data={filteredMonthlyData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                       <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickFormatter={(v) => `${v / 1000}k`} />
@@ -269,12 +462,12 @@ export default function Analytics() {
                         formatter={(value: number) => formatCurrency(value)}
                       />
                       <Legend />
-                      <Line type="monotone" dataKey="income" name="Wpływy" stroke="#22c55e" strokeWidth={2} dot={{ r: 4 }} />
-                      <Line type="monotone" dataKey="expenses" name="Wydatki" stroke="#ef4444" strokeWidth={2} dot={{ r: 4 }} />
-                      <Line type="monotone" dataKey="savings" name="Oszczędności" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4 }} />
+                      <Line type="monotone" dataKey="income" name="Wpływy" stroke="#22c55e" strokeWidth={2} dot={{ r: 5 }} />
+                      <Line type="monotone" dataKey="expenses" name="Wydatki" stroke="#ef4444" strokeWidth={2} dot={{ r: 5 }} />
+                      <Line type="monotone" dataKey="savings" name="Oszczędności" stroke="#f59e0b" strokeWidth={2} dot={{ r: 5 }} />
                     </LineChart>
                   ) : chartType === 'bar' ? (
-                    <BarChart data={monthlyData}>
+                    <BarChart data={filteredMonthlyData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                       <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickFormatter={(v) => `${v / 1000}k`} />
@@ -328,7 +521,7 @@ export default function Analytics() {
               <div className="p-4 border-b border-border">
                 <h3 className="font-semibold flex items-center gap-2">
                   <Calendar className="h-4 w-4 text-primary" />
-                  Podsumowanie miesięczne
+                  Szczegóły wybranych miesięcy
                 </h3>
               </div>
               <div className="overflow-x-auto">
@@ -343,9 +536,9 @@ export default function Analytics() {
                     </tr>
                   </thead>
                   <tbody>
-                    {monthlyData.map((m, idx) => (
+                    {filteredMonthlyData.map((m, idx) => (
                       <tr key={idx} className="border-b border-border/50 hover:bg-secondary/30">
-                        <td className="px-4 py-3 font-medium">{m.name}</td>
+                        <td className="px-4 py-3 font-medium">{m.fullName}</td>
                         <td className="px-4 py-3 text-right font-mono text-primary">{formatCurrency(m.income)}</td>
                         <td className="px-4 py-3 text-right font-mono text-destructive">{formatCurrency(m.expenses)}</td>
                         <td className="px-4 py-3 text-right font-mono text-warning">{formatCurrency(m.savings)}</td>
@@ -354,6 +547,16 @@ export default function Analytics() {
                         </td>
                       </tr>
                     ))}
+                    {/* Summary row */}
+                    <tr className="bg-secondary/50 font-semibold">
+                      <td className="px-4 py-3">SUMA</td>
+                      <td className="px-4 py-3 text-right font-mono text-primary">{formatCurrency(summary.totalIncome)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-destructive">{formatCurrency(summary.totalExpenses)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-warning">{formatCurrency(summary.totalSavings)}</td>
+                      <td className={`px-4 py-3 text-right font-mono ${summary.totalBalance >= 0 ? 'text-primary' : 'text-destructive'}`}>
+                        {formatCurrency(summary.totalBalance)}
+                      </td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
